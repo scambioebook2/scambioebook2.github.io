@@ -1,0 +1,290 @@
+<html>
+
+<head>
+	<title>Scambio Ebook II - indice</title>
+	<link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">
+  <script type="text/javascript" charset="utf8" src="//cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  <link rel="stylesheet" type="text/css" href="//cdn.datatables.net/v/dt/dt-1.10.15/r-2.1.1/sc-1.4.2/datatables.min.css" />
+  <script type="text/javascript" src="//cdn.datatables.net/v/dt/dt-1.10.15/r-2.1.1/sc-1.4.2/datatables.min.js"></script>
+  <script type="text/javascript" charset="utf8" src="//cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/crypto-js.min.js"></script>
+  <script type="text/javascript" charset="utf8" src="//cdnjs.cloudflare.com/ajax/libs/jquery-dateFormat/1.0/jquery.dateFormat.min.js"></script>
+  <style>
+  body {
+  	font-family: sans-serif;
+  }
+  
+  .custom-search-box {
+    float: left !important;
+    width: 100%;
+    text-align: left !important;
+  }
+  
+  .custom-search-box input {
+    min-width: 200px;
+    max-width: 500px;
+    width: 300px;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  
+  .only-with-replies {
+    min-width: auto !important;
+    max-width: auto !important;
+    width: auto !important;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  
+  .last-update-wrapper {
+    font-style: italic;
+    font-size: 85%;
+    float: right !important;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  
+  .dataTables_wrapper {
+    font-family: sans-serif;
+  }
+  
+  .borderClass {
+    border-color: red;
+    border-width: 1px;
+    border-style: solid;
+  }
+  
+  .form-row {
+  	padding-top: 0.3em;
+  }
+  </style>
+</head>
+
+<body>
+  <div id="mainDiv" style="display:none">
+    <label id="only-with-replies-wrapper">
+      &nbsp;&nbsp;&nbsp;Solo discussioni con risposte:
+      <input type="checkbox" id="only-with-replies" class="only-with-replies" />
+    </label>
+    <label id="last-update-wrapper" class="last-update-wrapper">
+      Last update: ?
+    </label>
+    <table id="table" class="display nowrap compact responsive" cellspacing="0" width="100%">
+      <thead>
+        <tr>
+          <th>Titolo</th>
+          <th>Risposte</th>
+          <th>Ultimo agg.</th>
+        </tr>
+      </thead>
+    </table>
+  </div>
+  <div id="passwordDiv">
+    <form id="passwordForm">
+    	<div class="form-row" style="margin-bottom:3em">
+    		<h3 style="margin-bottom:0">Ricerca nella Collezione tutti i libri del gruppo</h3>
+    		<i>solo per uso interno</i>
+    	</div>
+	    <div class="form-row">
+		    <input type="password" id="password" autocomplete="off" tabindex="1" placeholder="Inserisci password"/>
+		    <input type="submit" tabindex="3" value="Ok" />
+		  </div>
+	    <div class="form-row">
+	      <input type="checkbox" id="enableSorting" tabindex="2" value="true" checked/><label>Abilita ordinamento colonne <i>(si consiglia di disabilitarlo nel caso il caricamento della tabella risulti lento)</i></label>
+		  </div>
+	    <div class="form-row">
+    	  <p>Questo sito &#x00E8; ottimizzato per <b>Chrome</b>; il caricamento iniziale della tabella pu&#x00F2; richiedere molti secondi su altri browser e su PC poco potenti.<br>Nel caso dovesse comparire un finestra con un messaggio del tipo: "Attenzione: lo script non risponde", cliccate sul pulsante "Continua".</p>
+		  </div>
+    </form>
+  </div>
+  <script>
+  var SORTING_ENABLED = false;
+  var encryptedData = null;
+  		var timer = 0;
+
+  $(document).ready(function() {
+
+    $.ajax({
+      url: "data_0.json",
+      success: function(data) {
+        encryptedData = data;
+        $("#last-update-wrapper").text('   Ultimo aggiornamento: ' + $.format.date(data.lastUpdate, "dd/MM/yyyy HH:mm"));
+      },
+      cache: false
+    });
+
+    var decryptData = function(encrypted, passPhrase) {
+      try {
+        var salt = "ac0c8390d4ecdd343cd2fed337d7ce3f";
+        var iv = "338d1786618503df50aa6cee3b75f8f0";
+        var key = CryptoJS.PBKDF2(
+          passPhrase,
+          CryptoJS.enc.Hex.parse(salt), {
+            keySize: 128 / 32,
+            iterations: 1000
+          });
+        var decrypted = CryptoJS.AES.decrypt({
+            ciphertext: CryptoJS.enc.Base64.parse(encrypted)
+          },
+          key, {
+            mode: CryptoJS.mode.CBC,
+            padding: CryptoJS.pad.Pkcs7,
+            iv: CryptoJS.enc.Hex.parse(iv)
+          });
+        decryptedString = decrypted.toString(CryptoJS.enc.Utf8);
+        var json = JSON.parse(decryptedString);
+
+        var rows = [];
+        json.forEach(function(data) {
+          var row = [];
+          row.push(data.id + "|" + data.title);
+          row.push(Math.max(data.replies - 1, 0));
+          row.push(data.dateLast);
+          rows.push(row);
+        });
+        return rows;
+      } catch (err) {
+        console.log(err);
+        return null;
+      }
+    }
+
+		var entityMap = {
+			'&': '&amp;',
+			'<': '&lt;',
+			'>': '&gt;',
+			'"': '&quot;',
+			"'": '&#39;',
+			'/': '&#x2F;',
+			'`': '&#x60;',
+			'=': '&#x3D;'
+		};
+
+		function escapeHtml (string) {
+			return String(string).replace(/[&<>"'`=\/]/g, function (s) {
+				return entityMap[s];
+		});
+}
+
+		if(SORTING_ENABLED)
+		  $.extend(jQuery.fn.dataTableExt.oSort, {
+		    "date-eu-pre": function(d) {
+		      try {
+		        var str = d.substr(6, 4) + '-' + d.substr(3, 2) + '-' + d.substr(0, 2) + 'T' + d.substring(11) + ':00';
+		        return Date.parse(str);
+		      } catch (err) {
+		        return new Date().getTime();
+		      }
+		    },
+
+		    "date-eu-asc": function(a, b) {
+		      return a - b;
+		    },
+
+		    "date-eu-desc": function(a, b) {
+		      return b - a;
+		    }
+		  });
+
+    var initTable = function(data) {
+      var table = $('#table').DataTable({
+        data: data,
+        ordering: SORTING_ENABLED,
+        columnDefs: [{
+          targets: 2,
+          sType: "date-eu",
+          className: "dt-left"
+        }, {
+          targets: 1,
+          className: "dt-right"
+        }, {
+          targets: 0,
+          className: "dt-left",
+          render: function(data, type, row, meta) {
+            if (type === 'display') {
+              var keyTitle = data.split('|', 2);
+              var start = window.performance.now();
+              var text, tooltip;
+              if(keyTitle[1].length>150){
+              	text = escapeHtml(keyTitle[1].substring(0,150))+"...";
+              	tooltip = ' title="'+escapeHtml(keyTitle[1])+'"';
+              } else {
+              	text = escapeHtml(keyTitle[1])
+              	tooltip = '';
+              }
+              data = '<a href="http://www.anobii.com/forum_thread?topicId=' + keyTitle[0] + '"' + tooltip + ' target="_blank">' + text + '</a>';
+              timer = timer + window.performance.now() - start;
+            }
+            return data;
+          }
+        }],
+        order: [],
+        responsive: true,
+        deferRender: true,
+        scrollY: 'calc(100% - 6rem)',
+        scrollCollapse: true,
+        scroller: true,
+        language: {
+          searchPlaceholder: "Ricerca nel titolo"
+        }
+      });
+      $('.dataTables_filter').addClass('custom-search-box');
+
+      $.fn.dataTable.ext.search.push(
+        function(settings, data, dataIndex) {
+          return !$('#only-with-replies')[0].checked || parseInt(data[1]) > 0;
+        }
+      );
+
+      // Grab the datatables input box and alter how it is bound to events
+      $(".dataTables_filter input")
+          .unbind() // Unbind previous default bindings
+          .bind("input", function(e) { // Bind our desired behavior
+              // If the length is 3 or more characters, or the user pressed ENTER, search
+              if(this.value.length >= 3 || e.keyCode == 13) {
+                  // Call the API search function
+                  table.search(this.value).draw();
+              }
+              // Ensure we clear the search if they backspace far enough
+              if(this.value == "") {
+                  table.search("").draw();
+              }
+              return;
+          });
+
+      //enable checkbox "only with replies"
+      $("#only-with-replies-wrapper").appendTo("#table_filter");
+      $('#only-with-replies').change(function() {
+        table.draw();
+      });
+      $("#last-update-wrapper").appendTo("#table_filter");
+
+    };
+
+    $('#passwordForm').submit(function(event) {
+      event.preventDefault();
+      var rows = decryptData(encryptedData.encrypted, $('#password').val());
+      if (rows != null) {
+        $('#mainDiv').show();
+        $('#passwordDiv').hide();
+        var field = $('#enableSorting');
+        SORTING_ENABLED = $('#enableSorting')[0].checked;
+				console.log("sorting enabled: "+SORTING_ENABLED);
+        initTable(rows);
+      } else {
+        $('#mainDiv').hide();
+        $('#passwordDiv').show();
+        $('#password').val(null);
+        $('#password').addClass('borderClass');
+        $('#password').attr('title', 'Password errata');
+        $('#password').focus();
+      }
+      return false;
+    });
+
+    $('#password').focus();
+
+  });
+  </script>
+</body>
+
+</html>
