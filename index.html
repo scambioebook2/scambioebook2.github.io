@@ -108,7 +108,63 @@
       })
     }
 
+    var urlParams = new URLSearchParams(window.location.search);
+		var githubRemote = urlParams.has('github');
     var loadDataFromServer = function(index, table) {
+    	if(githubRemote)
+    		loadDataFromGithub(index, table);
+    	else
+    		loadDataFromDropbox(index, table);
+    };
+
+    var dataIndexDropbox = null;
+    var dataIndexDropboxError = 0;
+    var loadDataFromDropbox = function(index, table) {
+      if(encryptedData[index])
+        updateTableData(index, table);
+      else {
+      	if(!dataIndexDropbox)
+      		$.ajax({
+      			url: "https://dl.dropboxusercontent.com/s/rzyyiogvi5ou132/dataIndex.json?dt="+Math.random(),
+      			success: function(data) {
+      				dataIndexDropbox = JSON.parse(data);
+      				loadDataFromDropbox(index, table);
+      			},
+      			error: function() {
+      				if(dataIndexDropboxError < 2)
+      					dataIndexDropboxError++;
+      				else
+      					dataIndexDropbox = [];
+      			}
+      		});
+      	else
+	        $.ajax({
+	          url: dataIndexDropbox[index]+"?dt="+Math.random(),
+	          success: function(data) {
+	            encryptedData[index] = JSON.parse(data);
+	            if(index == 0){
+	            	$("#lastUpdateDate").text($.format.date(encryptedData[index].lastUpdate, "dd/MM/yyyy HH:mm"));
+	              for(var i=0;i<parseInt(encryptedData[index].pages);i++)
+	                $("#page-links").append("&nbsp;<a id='page-selector-link-"+i+"'>"+(i+1)+"</a>");
+	              setPageLinkHref(0);
+	              $("#buttonPassword").removeAttr('disabled');
+	              $("#buttonPassword").text('Invia');
+
+	              //if password has been passed as URL param, use it
+	              if(savedPassword != null){
+	                $("#password").val(savedPassword);
+	                $("#buttonPassword").click();
+	              }
+	            }
+	            else
+	              updateTableData(index, table);
+	          },
+	          cache: false
+	        });
+    	}
+    }
+
+    var loadDataFromGithub = function(index, table) {
       if(encryptedData[index])
         updateTableData(index, table);
       else
