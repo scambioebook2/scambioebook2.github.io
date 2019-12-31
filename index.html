@@ -1,0 +1,395 @@
+<html>
+
+<head>
+  <link rel="manifest" href="manifest.json">
+  <title>Scambio Ebook II - indice</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">
+  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+  <script type="text/javascript" charset="utf8" src="//cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  <script type="text/javascript" charset="utf8" src="//cdnjs.cloudflare.com/ajax/libs/jquery-cookie/1.4.1/jquery.cookie.min.js"></script>
+	<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/bs4/dt-1.10.18/r-2.2.2/sc-1.5.0/datatables.min.css"/>
+ 	<script type="text/javascript" src="https://cdn.datatables.net/v/bs4/dt-1.10.18/r-2.2.2/sc-1.5.0/datatables.min.js"></script>
+	<script type="text/javascript" charset="utf8" src="//cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/crypto-js.min.js"></script>
+  <script type="text/javascript" charset="utf8" src="//cdnjs.cloudflare.com/ajax/libs/jquery-dateFormat/1.0/jquery.dateFormat.min.js"></script>
+  <style type="text/css">
+    .loader {
+        border: 16px solid #f3f3f3; /* Light grey */
+        border-top: 16px solid #3498db; /* Blue */
+        border-radius: 50%;
+        width: 15vh;
+        height: 15vh;
+        animation: spin 3s linear infinite;
+        margin-top: 35vh;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .link-border {
+    	border: 1px solid;
+    	padding: 0px 3px;
+    	font-weight: bold;
+    	font-style: italic;
+    	font-size: small;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="mainDiv" class="container-fluid" style="display:none; margin-top:10px">
+    <div id="only-with-replies-wrapper" class="form-check mr-3">
+      <input type="checkbox" id="only-with-replies" class="form-check-input" />
+      <label class="form-check-label" for="only-with-replies">Solo discussioni con risposte</label>
+    </div>
+    <div id="page-selector-wrapper" class="mr-3">
+      <label>Vai a pagina:<span id="page-links"></span> &nbsp; <a href id="logout" class="link-border">logout</a> </label>
+      
+    </div>
+    <div id="spacer" class="flex-fill"></div>
+    <div id="last-update-wrapper">
+      <small>Ultimo aggiornamento: <span id="lastUpdateDate">?</span></small>
+    </div>
+    <table id="table" class="table table-sm table-striped table-bordered dt-responsive" cellspacing="0" width="100%">
+      <thead>
+        <tr>
+          <th>Titolo</th>
+          <th>Risposte</th>
+          <th>Ultimo agg.</th>
+        </tr>
+      </thead>
+    </table>
+  </div>
+  <div id="loader" class="container-fluid loader" style="display:none"></div>
+  <div id="passwordDiv" class="container-fluid">
+    <div class="card bg-light p-3 mt-1 mb-4">
+		 <h4>Ricerca libri</h4>
+		 <small class="text-muted">solo per uso interno</small>
+		</div>
+		<div class="help-block"></div>
+  	<form id="passwordForm">
+		  <div class="form-group">
+		    <label for="password">Password</label>
+		    <input class="form-control col-sm-2" type="password" id="password" autocomplete="off" tabindex="1" placeholder="Inserisci password" />
+		    <small id="passwordHelp" class="form-text text-muted invisible">password errata</small>
+        <div class="form-check">
+          <input type="checkbox" class="form-check-input" id="enableSavePwd" tabindex="2" value="true">
+          <label class="form-check-label" for="enableSavePwd">Salva password</label>
+        </div>
+		  </div>
+		  <div class="form-check">
+		    <input type="checkbox" class="form-check-input" id="enableSorting" tabindex="3" value="true" checked>
+		    <label class="form-check-label" for="enableSorting">Abilita ordinamento colonne</label>
+ 	      <small id="enableSortingHelp" class="form-text text-muted">si consiglia di disabilitarlo nel caso il caricamento della tabella risulti lento</small>
+		  </div>
+		  <button type="submit" class="btn btn-primary mt-3" tabindex="4" id="buttonPassword" disabled value="Attendere caricamento dati">Attendere caricamento dati</button>
+ 		</form>
+ 		<div class="alert alert-info mt-2" role="alert">
+		  <small>Questo sito &#x00E8; ottimizzato per <b>Chrome</b>; il caricamento iniziale della tabella pu&#x00F2; richiedere molti secondi su altri browser e su PC poco potenti.
+		  <br>Nel caso dovesse comparire un finestra con un messaggio del tipo: "Attenzione: lo script non risponde", cliccate sul pulsante "Continua".</small>
+		</div>
+  </div>
+  <script>
+  var SORTING_ENABLED = false;
+  var encryptedData = [];
+  var timer = 0;
+
+  $(document).ready(function() {
+
+    var setPageLinkHref = function(currentIndex){
+      $("[id^=page-selector-link]").each(function(){
+        var page = parseInt($(this).attr('id').substring(19));
+        if(page == currentIndex)
+          $(this).removeAttr('href');
+        else
+          $(this).attr('href','#');
+      })
+    }
+
+    var loadDataFromServer = function(index, table) {
+      if(encryptedData[index])
+        updateTableData(index, table);
+      else
+        $.ajax({
+          url: "data_"+index+".json",
+          success: function(data) {
+            encryptedData[index] = data;
+            if(index == 0){
+            	$("#lastUpdateDate").text($.format.date(data.lastUpdate, "dd/MM/yyyy HH:mm"));
+              for(var i=0;i<parseInt(data.pages);i++)
+                $("#page-links").append("&nbsp;<a id='page-selector-link-"+i+"'>"+(i+1)+"</a>");
+              setPageLinkHref(0);
+              $("#buttonPassword").removeAttr('disabled');
+              $("#buttonPassword").text('Invia');
+
+              //if password has been passed as URL param, use it
+              if(savedPassword != null){
+                $("#password").val(savedPassword);
+                $("#buttonPassword").click();
+              }
+            }
+            else
+              updateTableData(index, table);
+          },
+          cache: false
+        });
+    }
+
+    var decryptData = function(encrypted, passPhrase) {
+      try {
+        var salt = "ac0c8390d4ecdd343cd2fed337d7ce3f";
+        var iv = "338d1786618503df50aa6cee3b75f8f0";
+        var key = CryptoJS.PBKDF2(
+          passPhrase,
+          CryptoJS.enc.Hex.parse(salt), {
+            keySize: 128 / 32,
+            iterations: 1000
+          });
+        var decrypted = CryptoJS.AES.decrypt({
+            ciphertext: CryptoJS.enc.Base64.parse(encrypted)
+          },
+          key, {
+            mode: CryptoJS.mode.CBC,
+            padding: CryptoJS.pad.Pkcs7,
+            iv: CryptoJS.enc.Hex.parse(iv)
+          });
+        decryptedString = decrypted.toString(CryptoJS.enc.Utf8);
+        var json = JSON.parse(decryptedString);
+
+        var rows = [];
+        json.forEach(function(data) {
+          var row = [];
+          row.push(data.id + "|" + data.title);
+          row.push(Math.max(data.replies - 1, 0));
+          row.push(data.dateLast);
+          rows.push(row);
+        });
+        return rows;
+      } catch (err) {
+        console.log(err);
+        return null;
+      }
+    }
+
+    var entityMap = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+      '/': '&#x2F;',
+      '`': '&#x60;',
+      '=': '&#x3D;'
+    };
+
+    function escapeHtml(string) {
+      return String(string).replace(/[&<>"'`=\/]/g, function(s) {
+        return entityMap[s];
+      });
+    }
+
+    var updateTableData = function(index, table) {
+      var rows = decryptData(encryptedData[index].encrypted, $('#password').val());
+      table
+        .clear()
+        .rows.add(rows)
+        .draw();
+      setPageLinkHref(index);
+    }
+
+    var initTable = function(data) {
+
+	    if (SORTING_ENABLED){
+	      $.extend($.fn.dataTableExt.oSort, {
+	        "date-eu-pre": function(d) {
+	          try {
+	            var str = d.substr(6, 4) + '-' + d.substr(3, 2) + '-' + d.substr(0, 2) + 'T' + d.substring(11) + ':00';
+	            return Date.parse(str);
+	          } catch (err) {
+	            return new Date().getTime();
+	          }
+	        },
+
+	        "date-eu-asc": function(a, b) {
+	          return a - b;
+	        },
+
+	        "date-eu-desc": function(a, b) {
+	          return b - a;
+	        }
+	      });
+	    }
+
+      var table = $('#table').DataTable({
+        data: data,
+        ordering: SORTING_ENABLED,
+        dom: '<"#headerWrapper"<"#searchWrapper"f>i>t',
+        columnDefs: [{
+          targets: 2,
+          sType: "date-eu",
+          className: "text-left"
+        }, {
+          targets: 1,
+          className: "text-right"
+        }, {
+          targets: 0,
+          className: "text-left",
+          render: function(data, type, row, meta) {
+            if (type === 'display') {
+              var keyTitle = data.split('|', 2);
+              var start = window.performance.now();
+              var text, tooltip;
+              if (keyTitle[1].length > 150) {
+                text = escapeHtml(keyTitle[1].substring(0, 150)) + "...";
+                tooltip = ' title="' + escapeHtml(keyTitle[1]) + '"';
+              } else {
+                text = escapeHtml(keyTitle[1])
+                tooltip = '';
+              }
+              data = '<a href="http://www.anobii.com/forum_thread?topicId=' + keyTitle[0] + '"' + tooltip + ' target="_blank">' + text + '</a>';
+              timer = timer + window.performance.now() - start;
+            }
+            return data;
+          }
+        }],
+        order: [],
+        responsive: true,
+        deferRender: true,
+        scrollY: '84vh',
+        scrollCollapse: true,
+        scroller: true,
+        language: {
+          search: "Cerca",
+          searchPlaceholder: "Ricerca nel titolo",
+          info: "Righe dalla _START_ alla _END_ di _TOTAL_ totali"
+        }
+      });
+      $('.dataTables_filter').addClass('custom-search-box');
+
+      $.fn.dataTable.ext.search.push(
+        function(settings, data, dataIndex) {
+          return !$('#only-with-replies')[0].checked || parseInt(data[1]) > 0;
+        }
+      );
+
+      // Grab the datatables input box and alter how it is bound to events
+      $(".dataTables_filter input")
+        .unbind() // Unbind previous default bindings
+        .bind("input", function(e) { // Bind our desired behavior
+          // If the length is 3 or more characters, or the user pressed ENTER, search
+          if (this.value.length >= 3 || e.keyCode == 13) {
+            // Call the API search function
+            table.search(this.value).draw();
+          }
+          // Ensure we clear the search if they backspace far enough
+          if (this.value == "") {
+            table.search("").draw();
+          }
+          return;
+        });
+
+      //enable checkbox "only with replies"
+      $("#only-with-replies-wrapper").appendTo("#searchWrapper");
+      $('#only-with-replies').change(function() {
+        table.draw();
+      });
+      $("#page-selector-wrapper").appendTo("#searchWrapper");
+      $("[id^=page-selector-link]").click(function(evt) {
+        evt.preventDefault();
+        if($(this).attr('href')){
+          var page = parseInt($(this).attr('id').substring(19));
+          console.log("switching to page "+(page+1));
+          loadDataFromServer(page, table);
+        }
+      });
+      $("#spacer").appendTo("#searchWrapper");
+      $("#last-update-wrapper").appendTo("#searchWrapper");
+      $("#searchWrapper").addClass("form-inline");
+      $("#table_filter").addClass("mr-3");
+    };
+
+    $('#passwordForm').submit(function(event) {
+      event.preventDefault();
+      var index = 0; //we always initialize the table with first page
+      var rows = decryptData(encryptedData[index].encrypted, $('#password').val());
+      $('#loader').hide();
+      if (rows != null) {
+        $('#mainDiv').show();
+        $('#passwordDiv').hide();
+        var field = $('#enableSorting');
+        SORTING_ENABLED = $('#enableSorting')[0].checked;
+        //console.log("sorting enabled: " + SORTING_ENABLED);
+        initTable(rows);
+        //save cookie
+        if($('#enableSavePwd')[0].checked)
+          saveAuthCookie();
+        if(hasAuthCookie())
+          $('#logout').click(resetAuthCookie);
+        else
+          $('#logout').hide();
+      } else {
+        resetAuthCookie();
+        $('#mainDiv').hide();
+        $('#passwordDiv').show();
+        $('#password').val(null);
+        $('#password').addClass('is-invalid');
+        $('#passwordHelp').removeClass('invisible');
+        $('#password').focus();
+      }
+      return false;
+    });
+
+    var isAppMode = function(){
+      var urlParams = (new URL(document.location)).searchParams;
+      return urlParams.has("mode") && urlParams.get("mode") === 'app';
+    }
+    var authCookieName = 'auth'+(isAppMode()?'-app':'');
+
+
+    var hasAuthCookie = function(){
+      return typeof $.cookie(authCookieName) != 'undefined';
+    };
+    var saveAuthCookie = function(){
+      $.cookie(authCookieName,CryptoJS.AES.encrypt($('#password').val(), 'mk34£m234D$s').toString(),{expires:20*365});
+    };
+    var resetAuthCookie = function(){
+      $.removeCookie(authCookieName);
+    };
+    var readAuthCookie = function(){
+      try{
+        return CryptoJS.AES.decrypt($.cookie(authCookieName), 'mk34£m234D$s').toString(CryptoJS.enc.Utf8);
+      }catch(err){
+        console.log(err);
+      }
+      return null;
+    };
+
+
+    var urlParams = (new URL(document.location)).searchParams;
+    var savedPassword = null;
+    if(urlParams.has("password")){    
+      savedPassword = urlParams.get("password");
+    } else if(hasAuthCookie()){
+      var cookiePassword = readAuthCookie();
+      if(cookiePassword)
+        savedPassword = cookiePassword;
+    }
+
+    if(savedPassword != null){
+      $("#password").val(savedPassword);
+      $('#passwordDiv').hide();
+      $('#loader').show();
+    } else {
+      $('#password').focus();  
+    }
+
+    //preload page 0 of data
+    loadDataFromServer(0);
+
+  });
+  </script>
+</body>
+
+</html>
